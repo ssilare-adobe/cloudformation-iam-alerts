@@ -14,11 +14,79 @@ This CloudFormation template sets up automated alerts for IAM user creation acti
 ## Prerequisites
 
 1. **CloudTrail must be enabled** in your AWS account (management events logging)
-2. For Slack notifications: Create a Slack Incoming Webhook URL
-   - Go to https://api.slack.com/messaging/webhooks
-   - Create a new app or use existing one
-   - Add Incoming Webhooks feature
-   - Create webhook for your desired channel
+2. **AWS CLI** installed and configured with appropriate credentials
+3. For Slack notifications: Slack Incoming Webhook URL (see setup instructions below)
+4. For email notifications: Valid email address with access to confirm subscription
+
+## Setting Up Notifications
+
+### Slack Webhook Setup
+
+To receive alerts in Slack, you need to create an Incoming Webhook:
+
+1. **Go to Slack API Apps page**
+   - Visit https://api.slack.com/apps
+   - Click "Create New App"
+
+2. **Create the App**
+   - Choose "From scratch"
+   - Enter App Name (e.g., "IAM Activity Alerts")
+   - Select your workspace
+   - Click "Create App"
+
+3. **Enable Incoming Webhooks**
+   - In the left sidebar, click "Incoming Webhooks"
+   - Toggle "Activate Incoming Webhooks" to ON
+
+4. **Create a Webhook for Your Channel**
+   - Scroll down and click "Add New Webhook to Workspace"
+   - Select the channel where you want alerts posted (e.g., #security-alerts)
+   - Click "Allow"
+
+5. **Copy the Webhook URL**
+   - You'll see a webhook URL like: `https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXX`
+   - Copy this URL - you'll use it as the `SlackWebhookUrl` parameter
+
+6. **Test the Webhook (Optional)**
+   ```bash
+   curl -X POST -H 'Content-type: application/json' \
+     --data '{"text":"IAM Alerts test message"}' \
+     https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+   ```
+
+### Email Subscription Confirmation
+
+When using email notifications, you must confirm your subscription after deployment:
+
+1. **Deploy the CloudFormation Stack**
+   - Use one of the deployment methods below with your email address
+
+2. **Check Your Email**
+   - Within a few minutes, you'll receive an email from `AWS Notifications <no-reply@sns.amazonaws.com>`
+   - Subject: "AWS Notification - Subscription Confirmation"
+
+3. **Confirm the Subscription**
+   - Open the email
+   - Click the "Confirm subscription" link
+   - You'll see a confirmation page in your browser
+
+4. **Verify Subscription Status**
+   ```bash
+   aws sns list-subscriptions-by-topic \
+     --topic-arn arn:aws:sns:REGION:ACCOUNT_ID:iam-user-creation-alert-topic
+   ```
+   - Look for your email with `SubscriptionArn` (not "PendingConfirmation")
+
+**Important Notes:**
+- The confirmation link expires after 3 days
+- No alerts will be sent until you confirm the subscription
+- If you miss the email, you can resend it by updating the stack with the same email parameter
+
+### Using Both Slack and Email
+
+You can enable both notification methods simultaneously. Both require their respective setup:
+- Slack: No confirmation needed (works immediately after deployment)
+- Email: Requires subscription confirmation via email link
 
 ## Deployment Options
 
@@ -101,6 +169,57 @@ aws cloudformation create-stack \
   --parameters file://parameters.json \
   --capabilities CAPABILITY_IAM
 ```
+
+## Post-Deployment Steps
+
+### For Email Notifications
+
+1. **Confirm your subscription** (required)
+   - Check your email inbox for the confirmation message
+   - Click the confirmation link within 3 days
+   - You should see "Subscription confirmed!" in your browser
+
+2. **Verify subscription status**
+   ```bash
+   aws sns list-subscriptions-by-topic \
+     --topic-arn $(aws cloudformation describe-stacks \
+       --stack-name iam-activity-alerts \
+       --query 'Stacks[0].Outputs[?OutputKey==`SNSTopicArn`].OutputValue' \
+       --output text)
+   ```
+
+3. **If you didn't receive the email**
+   - Check your spam/junk folder
+   - Verify the email address in the CloudFormation parameters
+   - Redeploy the stack or update it to resend the confirmation
+
+### For Slack Notifications
+
+1. **Verify Lambda function was created**
+   ```bash
+   aws lambda get-function \
+     --function-name iam-user-creation-alert-slack-notifier
+   ```
+
+2. **Check the Slack channel**
+   - No confirmation needed - alerts will appear immediately when triggered
+   - Ensure the Slack app has permission to post to the channel
+
+3. **Test the webhook** (optional)
+   ```bash
+   curl -X POST -H 'Content-type: application/json' \
+     --data '{"text":"Test: IAM Alerts are configured"}' \
+     YOUR_WEBHOOK_URL
+   ```
+
+### Verify EventBridge Rule
+
+Check that the EventBridge rule is active:
+```bash
+aws events describe-rule --name iam-user-creation-alert
+```
+
+Look for `"State": "ENABLED"` in the output.
 
 ## Monitored Events
 
@@ -203,24 +322,129 @@ Expected cost: **< $1/month** for typical usage
 
 ## Troubleshooting
 
-### No alerts received
+### No Email Alerts Received
 
-1. **Verify CloudTrail is enabled**: Management events must be logged
-2. **Check SNS subscription** (email): Must confirm subscription via email
-3. **Test Slack webhook**: Use `curl` to verify webhook works
-4. **Check EventBridge rule**: Verify it's in "Enabled" state
-5. **Review CloudWatch Logs** (Slack): Check Lambda function logs for errors
+1. **Check subscription status**
+   ```bash
+   aws sns list-subscriptions-by-topic \
+     --topic-arn $(aws cloudformation describe-stacks \
+       --stack-name iam-activity-alerts \
+       --query 'Stacks[0].Outputs[?OutputKey==`SNSTopicArn`].OutputValue' \
+       --output text)
+   ```
+   - If status shows "PendingConfirmation", check your email and confirm
+   - If the confirmation email expired, update the stack to resend
 
-### Lambda fails (Slack)
+2. **Check spam/junk folder**
+   - Confirmation emails from AWS SNS may be filtered
+   - Add `no-reply@sns.amazonaws.com` to your contacts
 
-Check CloudWatch Logs for the Lambda function:
-```bash
-aws logs tail /aws/lambda/iam-user-creation-alert-slack-notifier --follow
-```
+3. **Verify email address**
+   ```bash
+   aws cloudformation describe-stacks \
+     --stack-name iam-activity-alerts \
+     --query 'Stacks[0].Parameters[?ParameterKey==`NotificationEmail`].ParameterValue' \
+     --output text
+   ```
 
-### Excluded users still triggering alerts
+4. **Resend confirmation email**
+   ```bash
+   aws cloudformation update-stack \
+     --stack-name iam-activity-alerts \
+     --use-previous-template \
+     --parameters ParameterKey=NotificationEmail,ParameterValue=your-email@example.com \
+       ParameterKey=SlackWebhookUrl,UsePreviousValue=true \
+       ParameterKey=ExcludedUserNames,UsePreviousValue=true \
+       ParameterKey=AlertRuleName,UsePreviousValue=true \
+     --capabilities CAPABILITY_IAM
+   ```
 
-Verify the `ExcludedUserNames` parameter matches exactly (case-sensitive)
+### No Slack Alerts Received
+
+1. **Test the webhook directly**
+   ```bash
+   curl -X POST -H 'Content-type: application/json' \
+     --data '{"text":"Test message"}' \
+     https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+   ```
+   - If this fails, the webhook URL is invalid or the Slack app was removed
+
+2. **Check Lambda function logs**
+   ```bash
+   aws logs tail /aws/lambda/iam-user-creation-alert-slack-notifier --follow
+   ```
+   - Look for error messages indicating webhook failures
+
+3. **Verify Lambda has correct webhook URL**
+   ```bash
+   aws lambda get-function-configuration \
+     --function-name iam-user-creation-alert-slack-notifier \
+     --query 'Environment.Variables.SLACK_WEBHOOK_URL'
+   ```
+
+4. **Check Lambda execution errors**
+   ```bash
+   aws lambda get-function \
+     --function-name iam-user-creation-alert-slack-notifier \
+     --query 'Configuration.LastUpdateStatus'
+   ```
+
+### No Alerts at All (Both Email and Slack)
+
+1. **Verify CloudTrail is enabled and logging management events**
+   ```bash
+   aws cloudtrail get-trail-status --name YOUR_TRAIL_NAME
+   ```
+
+2. **Check EventBridge rule status**
+   ```bash
+   aws events describe-rule --name iam-user-creation-alert
+   ```
+   - Ensure `"State": "ENABLED"`
+
+3. **Review EventBridge rule targets**
+   ```bash
+   aws events list-targets-by-rule --rule iam-user-creation-alert
+   ```
+   - Verify your SNS topic and/or Lambda function are listed
+
+4. **Trigger a test event**
+   ```bash
+   aws iam create-user --user-name test-alert-user
+   aws iam delete-user --user-name test-alert-user
+   ```
+   - Wait 1-2 minutes for the alert
+   - Ensure "test-alert-user" is not in your excluded users list
+
+### Excluded Users Still Triggering Alerts
+
+1. **Verify the parameter value** (case-sensitive)
+   ```bash
+   aws cloudformation describe-stacks \
+     --stack-name iam-activity-alerts \
+     --query 'Stacks[0].Parameters[?ParameterKey==`ExcludedUserNames`].ParameterValue' \
+     --output text
+   ```
+
+2. **Check the EventBridge rule pattern**
+   ```bash
+   aws events describe-rule --name iam-user-creation-alert \
+     --query 'EventPattern' --output text | jq .
+   ```
+
+### Lambda Function Errors (Slack)
+
+1. **View recent logs**
+   ```bash
+   aws logs tail /aws/lambda/iam-user-creation-alert-slack-notifier --follow
+   ```
+
+2. **Check for permission errors**
+   - Verify the Lambda execution role has CloudWatch Logs permissions
+
+3. **Verify urllib3 is available**
+   - The Lambda uses Python 3.12 with built-in urllib3
+   - If you see import errors, check the runtime version
 
 ## Cleanup
 
