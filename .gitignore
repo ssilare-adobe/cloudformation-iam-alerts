@@ -1,0 +1,24 @@
+# User-specific parameters files
+parameters.json
+*-parameters.json
+
+# AWS CloudFormation outputs
+*.out
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.bak
