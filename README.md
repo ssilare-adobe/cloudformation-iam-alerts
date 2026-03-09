@@ -2,31 +2,33 @@
 
 Automated monitoring and alerting for IAM user creation activities across AWS accounts.
 
-## 🎯 Overview
+## Overview
 
 This CloudFormation template sets up real-time alerts for critical IAM events:
 - **CreateUser** - New IAM user creation
 - **CreateAccessKey** - Access key generation
 - **CreateLoginProfile** - Console access enablement
 
-Get notified via **email (SNS)** and/or **Slack** when these events occur, helping you monitor unauthorized or unexpected IAM activity.
+Notifications can be delivered via email (SNS) and/or Slack to monitor unauthorized or unexpected IAM activity.
 
-## 🚀 Quick Start
+## Prerequisites
 
-### Prerequisites
 - AWS account with CloudTrail enabled (management events)
 - AWS CLI installed and configured
 - (Optional) Slack Incoming Webhook URL
 
-### Deploy with Interactive Script
+## Deployment
+
+### Interactive Script
 ```bash
 cd cloudformation-iam-alerts
 ./deploy.sh
 ```
 
-### Deploy with AWS CLI
+### AWS CLI
+
+Email notifications:
 ```bash
-# Email notifications
 aws cloudformation create-stack \
   --stack-name iam-activity-alerts \
   --template-body file://iam-alerts-cloudformation.yaml \
@@ -34,8 +36,10 @@ aws cloudformation create-stack \
     ParameterKey=NotificationEmail,ParameterValue=your-email@example.com \
     ParameterKey=ExcludedUserNames,ParameterValue="service-account1,service-account2" \
   --capabilities CAPABILITY_IAM
+```
 
-# Slack notifications
+Slack notifications:
+```bash
 aws cloudformation create-stack \
   --stack-name iam-activity-alerts \
   --template-body file://iam-alerts-cloudformation.yaml \
@@ -45,34 +49,24 @@ aws cloudformation create-stack \
   --capabilities CAPABILITY_IAM
 ```
 
-## 📋 What's Included
+## Repository Contents
 
 - **`iam-alerts-cloudformation.yaml`** - Main CloudFormation template
 - **`deploy.sh`** - Interactive deployment script
 - **`parameters-example.json`** - Sample parameters file
 - **`IAM-ALERTS-README.md`** - Detailed documentation
 
-## ✨ Features
+## Features
 
-- ✅ Real-time monitoring via EventBridge
-- ✅ Flexible notifications (Email, Slack, or both)
-- ✅ Customizable user exclusions (for service accounts)
-- ✅ Rich alert details (event type, user, timestamp, source IP, etc.)
-- ✅ Easy to share across AWS accounts
-- ✅ Minimal cost (< $1/month)
-- ✅ Secure (Slack webhook stored with NoEcho)
+- Real-time monitoring via EventBridge
+- Flexible notifications (Email, Slack, or both)
+- Customizable user exclusions (for service accounts)
+- Rich alert details (event type, user, timestamp, source IP, etc.)
+- Easy to share across AWS accounts
+- Minimal cost (< $1/month)
+- Secure (Slack webhook stored with NoEcho)
 
-## 📊 Alert Information
-
-Each alert includes:
-- Event type and timestamp
-- Target username
-- AWS Account ID and region
-- Principal who performed the action
-- Source IP address
-- Full context for investigation
-
-## 🔧 Configuration Parameters
+## Configuration Parameters
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
@@ -81,7 +75,16 @@ Each alert includes:
 | `ExcludedUserNames` | Users to exclude from alerts | `portalsvc1,klam-sts-user` |
 | `AlertRuleName` | EventBridge rule name | `iam-user-creation-alert` |
 
-## 🧪 Testing
+## Alert Information
+
+Each alert includes:
+- Event type and timestamp
+- Target username
+- AWS Account ID and region
+- Principal who performed the action
+- Source IP address
+
+## Testing
 
 Test your deployment:
 ```bash
@@ -92,39 +95,27 @@ aws iam create-user --user-name test-alert-user
 aws iam delete-user --user-name test-alert-user
 ```
 
-## 🗑️ Cleanup
+## Cleanup
 
 Remove all resources:
 ```bash
 aws cloudformation delete-stack --stack-name iam-activity-alerts
 ```
 
-## 📚 Documentation
+## Use Cases
 
-For detailed documentation, troubleshooting, and advanced configuration, see [IAM-ALERTS-README.md](IAM-ALERTS-README.md).
+- Security Monitoring - Detect unauthorized IAM user creation
+- Compliance - Audit trail for IAM changes
+- Team Awareness - Keep security teams informed of IAM activities
+- Multi-Account Deployment - Standardize alerting across AWS Organization
 
-## 💡 Use Cases
-
-- **Security Monitoring** - Detect unauthorized IAM user creation
-- **Compliance** - Audit trail for IAM changes
-- **Team Awareness** - Keep security teams informed of IAM activities
-- **Multi-Account Deployment** - Standardize alerting across AWS Organization
-
-## 🔒 Security
+## Security
 
 - Webhook URLs protected with NoEcho (not visible in console/logs)
 - Minimal IAM permissions (Lambda only has CloudWatch Logs access)
 - SNS topic policy restricts publishing to EventBridge only
 - No credentials stored or transmitted
 
-## 📄 License
+## Documentation
 
-Free to use and modify for your AWS accounts.
-
-## 🤝 Contributing
-
-Feel free to submit issues or pull requests for improvements!
-
----
-
-**Made for easy sharing across AWS accounts and teams** 🚀
+For detailed documentation, troubleshooting, and advanced configuration, see [IAM-ALERTS-README.md](IAM-ALERTS-README.md).
